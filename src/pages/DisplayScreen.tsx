@@ -55,7 +55,36 @@ const DisplayScreen: React.FC = () => {
   const isRTL = i18n.language === 'ar';
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [restaurantInfo, setRestaurantInfo] = useState<{ name?: string; phone?: string; cuisine?: string } | null>(null);
+  const [restaurantInfo, setRestaurantInfo] = useState<{ name?: string; phone?: string; cuisine?: string } | null>(() => {
+    try {
+      const cachedRaw = typeof window !== 'undefined' ? localStorage.getItem('restaurantInfo') : null;
+      const userRaw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const cached = cachedRaw ? JSON.parse(cachedRaw) : null;
+      const localUser = userRaw ? JSON.parse(userRaw) : null;
+      const name =
+        cached?.name ||
+        localUser?.restaurant?.name ||
+        localUser?.restaurantName ||
+        localUser?.businessName ||
+        localUser?.name ||
+        localUser?.restaurant?.displayName;
+      const phone =
+        cached?.phone ||
+        localUser?.restaurant?.contact?.phone ||
+        localUser?.contact?.phone ||
+        localUser?.phone ||
+        localUser?.restaurantPhone;
+      const cuisine =
+        cached?.cuisine ||
+        localUser?.restaurant?.cuisine ||
+        localUser?.cuisine ||
+        localUser?.restaurant?.type;
+      if (name || phone || cuisine) {
+        return { name, phone, cuisine };
+      }
+    } catch {}
+    return null;
+  });
 
   // ابدأ الصفحة من الأعلى عند الدخول لهذه الصفحة
   useEffect(() => {
@@ -64,8 +93,44 @@ const DisplayScreen: React.FC = () => {
 
   // Redux state
   const auth = useSelector((state: RootState) => state.auth);
-  const restaurantId = auth.user?.restaurantId || '68a46a003f923c33fd567ac0';
+  // Prefer restaurantId from logged-in user, then from localStorage user; keep legacy fallback for other data.
+  const localUserForId = (() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  })();
+  const restaurantId = auth.user?.restaurantId || localUserForId?.restaurantId || '68a46a003f923c33fd567ac0';
   const authToken = auth.token || localStorage.getItem('authToken') || undefined;
+  
+
+  // Initialize restaurant info immediately from available local user data to avoid flashing default
+  useEffect(() => {
+    try {
+      const localUserRaw = localStorage.getItem('user');
+      const localUser = auth?.user || (localUserRaw ? JSON.parse(localUserRaw) : null);
+      if (localUser && !restaurantInfo) {
+        const name =
+          localUser?.restaurant?.name ||
+          localUser?.restaurantName ||
+          localUser?.businessName ||
+          localUser?.name ||
+          localUser?.restaurant?.displayName;
+        const phone =
+          localUser?.restaurant?.contact?.phone ||
+          localUser?.contact?.phone ||
+          localUser?.phone ||
+          localUser?.restaurantPhone;
+        const cuisine =
+          localUser?.restaurant?.cuisine ||
+          localUser?.cuisine ||
+          localUser?.restaurant?.type;
+        if (name || phone || cuisine) {
+          setRestaurantInfo({ name, phone, cuisine });
+        }
+      }
+    } catch {}
+  }, [auth?.user]);
 
   // API calls using Redux Toolkit
   const { 
@@ -102,7 +167,9 @@ const DisplayScreen: React.FC = () => {
         const name = data?.name || data?.restaurant?.name;
         const phone = data?.contact?.phone || data?.restaurant?.contact?.phone;
         const cuisine = data?.cuisine || data?.restaurant?.cuisine;
-        setRestaurantInfo({ name, phone, cuisine });
+        const info = { name, phone, cuisine };
+        setRestaurantInfo(info);
+        try { localStorage.setItem('restaurantInfo', JSON.stringify(info)); } catch {}
       })
       .catch(() => {})
       .finally(() => {});
@@ -441,19 +508,9 @@ const DisplayScreen: React.FC = () => {
               <Utensils className="w-8 h-8 text-white" />
             </div>
             <div className="text-center md:text-left" style={isRTL ? {textAlign: 'right'} : {}}>
-              <h1 className="text-3xl font-bold text-[#780000]">
-                {restaurantInfo?.name || (
-                  i18n.language === 'ar' ? 'مطعم الشرق الأوسط' : 
-                  i18n.language === 'de' ? 'Mittlerer Osten Restaurant' : 
-                  'Middle East Restaurant'
-                )}
-              </h1>
+              <h1 className="text-3xl font-bold text-[#780000]">{restaurantInfo?.name || ''}</h1>
               <p className="text-gray-600 text-sm">
-                {restaurantInfo?.cuisine || (
-                  i18n.language === 'ar' ? 'أفضل المأكولات الشرقية' : 
-                  i18n.language === 'de' ? 'Beste orientalische Küche' : 
-                  'Best Middle Eastern Cuisine'
-                )}
+                {restaurantInfo?.cuisine || ''}
               </p>
             </div>
           </div>
