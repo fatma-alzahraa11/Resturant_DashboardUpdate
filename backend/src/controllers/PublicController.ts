@@ -74,7 +74,7 @@ export default {
               description: product.description,
               price: product.price,
               originalPrice: product.originalPrice,
-              // images: product.images,
+              images: product.images,
               ingredients: product.ingredients,
               allergens: product.allergens,
               nutritionalInfo: product.nutritionalInfo,

@@ -87,6 +87,7 @@ export default {
         ingredients: normalizeIngredients(ingredients),
         allergens: normalizedAllergens,
         isNewItem: typeof isNewItem === 'boolean' ? isNewItem : false,
+        images: Array.isArray(images) ? images : [],
         //   isPopular: isPopular || false,
 
       };
@@ -264,7 +265,7 @@ export default {
         description,
         price,
         ingredients,
-        //images,
+        images,
         allergens,
         //nutritionalInfo,
         availability,
@@ -325,7 +326,7 @@ export default {
           else if (Array.isArray((ingredients as any).de)) updateData.ingredients = (ingredients as any).de;
         }
       }
-      //if (images !== undefined) updateData.images = images;
+      if (images !== undefined) updateData.images = images;
       if (allergens !== undefined) {
         if (Array.isArray(allergens)) {
           updateData.allergens = allergens;

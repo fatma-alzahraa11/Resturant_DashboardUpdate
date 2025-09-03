@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Phone, 
   Heart,
+  Star,
   Coffee,
   Utensils,
   Wine,
@@ -237,7 +238,7 @@ const DisplayScreen: React.FC = () => {
       category: product.category || 'general',
       categoryAr: product.categoryAr || 'عام',
       categoryDe: product.categoryDe || 'Allgemein',
-      image: product.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400',
+      image: product.image || (Array.isArray(product.images) && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400'),
       isNew: Boolean(product.isNewItem ?? product.isNew ?? false),
       isPopular: product.isPopular || false,
       allergens: Array.isArray(product.allergens) ? product.allergens : [],
@@ -686,7 +687,8 @@ const DisplayScreen: React.FC = () => {
                 {/* Badges */}
                 <div className={`absolute top-3 ${isRTL ? 'right-3' : 'left-3'} flex flex-col gap-2`}>
                   {item.isNew && (
-                    <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg animate-bounce">
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 text-white text-xs font-extrabold shadow-lg border-2 border-white animate-bounce">
+                      <Star className="w-3.5 h-3.5" />
                       {i18n.language === 'ar' ? 'جديد' : 
                        i18n.language === 'de' ? 'NEU' : 'NEW'}
                     </span>

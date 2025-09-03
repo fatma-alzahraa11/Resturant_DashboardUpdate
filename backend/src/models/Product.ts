@@ -16,7 +16,7 @@ export interface IProduct extends Document {
   price: number;
   originalPrice?: number;
   currency: string;
-  // images: string[];
+  images: string[];
   ingredients: string;
   allergens: string;
   isNewItem?: boolean;
@@ -102,15 +102,15 @@ const ProductSchema = new Schema<IProduct>({
      default: 'EUR',
     // enum: ['USD', 'EUR', 'GBP', 'SAR', 'AED']
   },
-  // images: [{
-  //   type: String,
-  //   validate: {
-  //     validator: function(v: string) {
-  //       return /^https?:\/\/.+/.test(v) || /^data:image\/.+/.test(v);
-  //     },
-  //     message: 'Invalid image URL or data URL'
-  //   }
-  // }],
+  images: [{
+    type: String,
+    validate: {
+      validator: function(v: string) {
+        return /^https?:\/\/.+/.test(v) || /^data:image\/.+/.test(v);
+      },
+      message: 'Invalid image URL or data URL'
+    }
+  }],
   ingredients: [{
     type: String,
     trim: true
