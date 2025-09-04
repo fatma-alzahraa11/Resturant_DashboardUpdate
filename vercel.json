@@ -16,22 +16,7 @@
       }
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/src/server.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
-  ],
   "env": {
     "NODE_ENV": "production"
   },
-  "functions": {
-    "backend/src/server.ts": {
-      "maxDuration": 30
-    }
-  }
 }
