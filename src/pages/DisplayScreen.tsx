@@ -19,9 +19,8 @@ import {
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { useGetProductsQuery, useGetCategoriesQuery } from '../store/services/catalogApi';
+import { useGetPublicProductsQuery, useGetPublicCategoriesQuery, useGetPublicDiscountsQuery } from '../store/services/catalogApi';
 import { useGetActiveOffersQuery } from '../store/services/offersApi';
-import { useGetDiscountsQuery } from '../store/services/discountApi';
 
 interface MenuItem {
   id: string;
@@ -32,6 +31,14 @@ interface MenuItem {
   descriptionAr: string;
   descriptionDe: string;
   price: number;
+  discountedPrice?: number;
+  discount?: {
+    id: string;
+    name: string;
+    type: string;
+    value: number;
+    validTill: string;
+  } | null;
   category: string;
   categoryAr: string;
   categoryDe: string;
@@ -133,13 +140,13 @@ const DisplayScreen: React.FC = () => {
     } catch {}
   }, [auth?.user]);
 
-  // API calls using Redux Toolkit
+  // API calls using Redux Toolkit - using public endpoints for display screen
   const { 
     data: productsData, 
     isLoading: productsLoading, 
     error: productsError,
     refetch: refetchProducts 
-  } = useGetProductsQuery({ restaurantId }, {
+  } = useGetPublicProductsQuery({ restaurantId }, {
     // تحديث تلقائي كل 30 ثانية
     pollingInterval: 30000,
     // إعادة محاولة عند فشل الاتصال
@@ -181,7 +188,7 @@ const DisplayScreen: React.FC = () => {
     isLoading: categoriesLoading, 
     error: categoriesError,
     refetch: refetchCategories 
-  } = useGetCategoriesQuery({ restaurantId }, {
+  } = useGetPublicCategoriesQuery({ restaurantId }, {
     // تحديث تلقائي كل 30 ثانية
     pollingInterval: 30000,
     // إعادة محاولة عند فشل الاتصال
@@ -207,7 +214,7 @@ const DisplayScreen: React.FC = () => {
     isLoading: discountsLoading, 
     error: discountsError,
     refetch: refetchDiscounts 
-  } = useGetDiscountsQuery({ restaurantId }, {
+  } = useGetPublicDiscountsQuery({ restaurantId }, {
     // تحديث تلقائي كل 30 ثانية
     pollingInterval: 30000,
     // إعادة محاولة عند فشل الاتصال
@@ -216,36 +223,140 @@ const DisplayScreen: React.FC = () => {
     refetchOnReconnect: true
   });
 
+  // Helper function to find applicable discounts for a product
+  const getProductDiscounts = (productId: string) => {
+    if (!discountsData || !Array.isArray(discountsData)) {
+      console.log('No discounts data available');
+      return [];
+    }
+    
+    console.log(`Looking for discounts for product: ${productId}`);
+    console.log('Available discounts:', discountsData);
+    
+    const applicableDiscounts = discountsData.filter((discount: any) => {
+      console.log(`Checking discount: ${discount._id}`, {
+        isActive: discount.isActive,
+        isPublic: discount.isPublic,
+        target: discount.target,
+        schedule: discount.schedule
+      });
+      
+      // Check if discount is active and public
+      if (!discount.isActive || !discount.isPublic) {
+        console.log(`Discount ${discount._id} is not active or public`);
+        return false;
+      }
+      
+      // Check if discount is currently valid (within date range)
+      const now = new Date();
+      const startDate = new Date(discount.schedule?.startDate);
+      const endDate = new Date(discount.schedule?.endDate);
+      
+      console.log(`Date check for discount ${discount._id}:`, {
+        now: now.toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        isAfterStart: now >= startDate,
+        isBeforeEnd: now <= endDate
+      });
+      
+      if (now < startDate || now > endDate) {
+        console.log(`Discount ${discount._id} is not within date range`);
+        return false;
+      }
+      
+      // Check if product is targeted by this discount
+      if (discount.target?.type === 'specific_products') {
+        const productIds = discount.target.productIds || [];
+        const isTargeted = productIds.includes(productId);
+        console.log(`Product targeting check for discount ${discount._id}:`, {
+          productIds,
+          productId,
+          isTargeted
+        });
+        return isTargeted;
+      }
+      
+      console.log(`Discount ${discount._id} target type is not specific_products: ${discount.target?.type}`);
+      return false;
+    });
+    
+    console.log(`Found ${applicableDiscounts.length} applicable discounts for product ${productId}`);
+    return applicableDiscounts;
+  };
+
+  // Helper function to calculate discounted price
+  const calculateDiscountedPrice = (originalPrice: number, discount: any) => {
+    if (!discount || !discount.rule) return originalPrice;
+    
+    const { type, value } = discount.rule;
+    
+    switch (type) {
+      case 'percentage':
+        return originalPrice * (1 - value / 100);
+      case 'fixed':
+        return Math.max(0, originalPrice - value);
+      default:
+        return originalPrice;
+    }
+  };
+
   // Transform backend data to frontend format
   const transformProducts = (): MenuItem[] => {
     if (!productsData || !Array.isArray(productsData)) return [];
     
-    return productsData.map((product: any) => ({
-      id: product._id || product.id,
-      name: typeof product.name === 'string' ? product.name : 
-            (product.name?.en || 'Product Name'),
-      nameAr: typeof product.name === 'string' ? product.name : 
-              (product.name?.ar || 'اسم المنتج'),
-      nameDe: typeof product.name === 'string' ? product.name : 
-              (product.name?.de || 'Produktname'),
-      description: typeof product.description === 'string' ? product.description : 
-                  (product.description?.en || 'Product description'),
-      descriptionAr: typeof product.description === 'string' ? product.description : 
-                    (product.description?.ar || 'وصف المنتج'),
-      descriptionDe: typeof product.description === 'string' ? product.description : 
-                    (product.description?.de || 'Produktbeschreibung'),
-      price: product.price || 0,
-      category: product.category || 'general',
-      categoryAr: product.categoryAr || 'عام',
-      categoryDe: product.categoryDe || 'Allgemein',
-      image: product.image || (Array.isArray(product.images) && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400'),
-      isNew: Boolean(product.isNewItem ?? product.isNew ?? false),
-      isPopular: product.isPopular || false,
-      allergens: Array.isArray(product.allergens) ? product.allergens : [],
-      preparationTime: product.preparationTime || 15,
-      // دعم هيكلين من الخادم: availability.isAvailable أو isAvailable مباشرة
-      isAvailable: (product.availability?.isAvailable === true) || (product.isAvailable === true)
-    }));
+    return productsData.map((product: any) => {
+      const productId = product._id || product.id;
+      const applicableDiscounts = getProductDiscounts(productId);
+      const bestDiscount = applicableDiscounts.length > 0 ? applicableDiscounts[0] : null;
+      const originalPrice = product.price || 0;
+      const discountedPrice = bestDiscount ? calculateDiscountedPrice(originalPrice, bestDiscount) : originalPrice;
+      
+      console.log(`Product ${productId} (${product.name?.en || product.name}):`, {
+        originalPrice,
+        discountedPrice,
+        hasDiscount: !!bestDiscount,
+        discount: bestDiscount
+      });
+      
+      return {
+        id: productId,
+        name: typeof product.name === 'string' ? product.name : 
+              (product.name?.en || 'Product Name'),
+        nameAr: typeof product.name === 'string' ? product.name : 
+                (product.name?.ar || 'اسم المنتج'),
+        nameDe: typeof product.name === 'string' ? product.name : 
+                (product.name?.de || 'Produktname'),
+        description: typeof product.description === 'string' ? product.description : 
+                    (product.description?.en || 'Product description'),
+        descriptionAr: typeof product.description === 'string' ? product.description : 
+                      (product.description?.ar || 'وصف المنتج'),
+        descriptionDe: typeof product.description === 'string' ? product.description : 
+                      (product.description?.de || 'Produktbeschreibung'),
+        price: originalPrice,
+        discountedPrice: discountedPrice,
+        discount: bestDiscount ? {
+          id: bestDiscount._id,
+          name: typeof bestDiscount.name === 'string' ? bestDiscount.name : 
+                (bestDiscount.name?.en || 'Discount'),
+          type: bestDiscount.rule?.type || 'percentage',
+          value: bestDiscount.rule?.value || 0,
+          validTill: bestDiscount.schedule?.endDate ? 
+            new Date(bestDiscount.schedule.endDate).toLocaleDateString() : 'Ongoing'
+        } : null,
+        // Fix: Use categoryId instead of non-existent category field
+        category: product.categoryId?._id || product.categoryId || 'general',
+        categoryAr: product.categoryId?.name?.ar || 'عام',
+        categoryDe: product.categoryId?.name?.de || 'Allgemein',
+        image: product.image || (Array.isArray(product.images) && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400'),
+        isNew: Boolean(product.isNewItem ?? product.isNew ?? false),
+        isPopular: product.isPopular || false,
+        allergens: Array.isArray(product.allergens) ? product.allergens : [],
+                 preparationTime: product.preparation?.time || 15,
+        // دعم هيكلين من الخادم: availability.isAvailable أو isAvailable مباشرة
+        isAvailable: (product.availability?.isAvailable === true) || (product.isAvailable === true)
+      };
+    });
   };
 
   const transformCategories = (): Category[] => {
@@ -258,7 +369,7 @@ const DisplayScreen: React.FC = () => {
       'desserts': <Dessert className="w-5 h-5" />,
       'pizza': <Pizza className="w-5 h-5" />,
       'meat': <Beef className="w-5 h-5" />,
-      'salads': <Salad className="w-5 h-5" />,
+      'salads': <Salad className="w-5 h-6" />,
       'default': <Utensils className="w-5 h-5" />
     };
 
@@ -308,18 +419,6 @@ const DisplayScreen: React.FC = () => {
     }));
   };
 
-  const transformDiscounts = () => {
-    if (!discountsData || !Array.isArray(discountsData)) return [];
-    
-    return discountsData.map((discount: any) => ({
-      id: discount._id || discount.id,
-      name: typeof discount.name === 'string' ? discount.name : 
-            (discount.name?.en || 'Discount'),
-      value: discount.value || 0,
-      type: discount.type || 'percentage',
-      validTill: discount.validTill || 'Ongoing'
-    }));
-  };
 
   // لا نستخدم بيانات وهمية للعروض/الخصومات. المستخدم الجديد لن يرى الأقسام حتى يضيف بيانات
 
@@ -337,8 +436,8 @@ const DisplayScreen: React.FC = () => {
     { id: 'drinks', name: 'Drinks', nameAr: 'المشروبات', nameDe: 'Getränke', icon: <Coffee className="w-6 h-6" /> },
     { id: 'desserts', name: 'Desserts', nameAr: 'الحلويات', nameDe: 'Desserts', icon: <Dessert className="w-6 h-6" /> },
   ];
+
   const offers = offersData ? transformOffers() : [];
-  const discounts = discountsData ? transformDiscounts() : [];
 
   // Log API errors for debugging
   useEffect(() => {
@@ -352,9 +451,81 @@ const DisplayScreen: React.FC = () => {
     console.log('Raw Offers Data:', offersData);
     console.log('Raw Discounts Data:', discountsData);
     console.log('Transformed Offers:', transformOffers());
-    console.log('Transformed Discounts:', transformDiscounts());
+    
+    // Additional discount debugging
+    if (discountsData && discountsData.length > 0) {
+      console.log('=== Discount Debug ===');
+      console.log('Total discounts:', discountsData.length);
+      discountsData.forEach((discount: any, index: number) => {
+        console.log(`Discount ${index + 1}:`, {
+          id: discount._id,
+          name: discount.name,
+          isActive: discount.isActive,
+          isPublic: discount.isPublic,
+          rule: discount.rule,
+          schedule: discount.schedule,
+          target: discount.target,
+          targetType: discount.target?.type,
+          productIds: discount.target?.productIds,
+          productIdsType: typeof discount.target?.productIds,
+          productIdsLength: discount.target?.productIds?.length
+        });
+      });
+      console.log('======================');
+    }
+    
     console.log('======================');
   }, [productsError, categoriesError, offersError, discountsError, offersData, discountsData]);
+
+  // Debug logging for category filtering
+  useEffect(() => {
+    if (productsData && categoriesData) {
+      console.log('=== Category Filtering Debug ===');
+      console.log('Categories:', categories);
+      console.log('Menu Items:', menuItems);
+      console.log('Selected Category:', selectedCategory);
+      console.log('Raw Products Data:', productsData);
+      console.log('Raw Categories Data:', categoriesData);
+      
+      // Additional debugging for category structure
+      if (productsData.length > 0) {
+        console.log('Sample Product Category Structure:', {
+          productId: productsData[0]._id,
+          productName: productsData[0].name,
+          categoryId: productsData[0].categoryId,
+          categoryIdType: typeof productsData[0].categoryId,
+          categoryIdIsObject: typeof productsData[0].categoryId === 'object',
+          categoryIdId: productsData[0].categoryId?._id,
+          categoryIdName: productsData[0].categoryId?.name,
+          categoryIdStringified: JSON.stringify(productsData[0].categoryId)
+        });
+        
+        // Debug first few products
+        console.log('=== Product IDs Debug ===');
+        productsData.slice(0, 3).forEach((product: any, index: number) => {
+          console.log(`Product ${index + 1}:`, {
+            id: product._id,
+            name: product.name?.en || product.name,
+            idType: typeof product._id,
+            idStringified: JSON.stringify(product._id)
+          });
+        });
+        console.log('======================');
+      }
+      
+      if (categoriesData.length > 0) {
+        console.log('Sample Category Structure:', {
+          categoryId: categoriesData[0]._id,
+          categoryName: categoriesData[0].name,
+          categoryType: typeof categoriesData[0]._id,
+          categoryIdStringified: JSON.stringify(categoriesData[0]._id),
+          categoryNameStringified: JSON.stringify(categoriesData[0].name)
+        });
+      }
+      
+      console.log('================================');
+    }
+  }, [productsData, categoriesData, selectedCategory, menuItems]);
 
   // سلايدر العروض: عرض كل الصور معًا (carousel)
   const [offerIndex] = useState(0);
@@ -477,7 +648,11 @@ const DisplayScreen: React.FC = () => {
 
   const filteredItems = selectedCategory === 'all' 
     ? menuItems 
-    : menuItems.filter(item => item.category === selectedCategory);
+    : menuItems.filter(item => {
+        const match = item.category === selectedCategory;
+        console.log(`Filtering item: ${item.name}, category: ${item.category} (${typeof item.category}), selectedCategory: ${selectedCategory} (${typeof selectedCategory}), match: ${match}`);
+        return match;
+      });
 
   // قائمة العروض مرتبة حسب اللغة
   const offersToShow = isRTL ? [...offers].reverse() : offers;
@@ -615,35 +790,6 @@ const DisplayScreen: React.FC = () => {
           </div>
         </div>
         )}
-        {/* Discounts Badges Modern */}
-        {discounts.length > 0 && (
-        <div className="mb-10">
-          <h2 className="text-2xl font-extrabold text-[#780000] mb-6 tracking-tight flex items-center gap-2">
-            <Percent className="w-7 h-7 text-[#E85D04]" />
-            {i18n.language === 'ar' ? 'الخصومات' : i18n.language === 'de' ? 'Rabatte' : 'Discounts'}
-          </h2>
-          <div className="flex gap-6 flex-wrap justify-center">
-            {discounts.map((discount) => (
-              <div
-                key={discount.id}
-                className="flex flex-col items-center justify-center bg-gradient-to-br from-[#F48C06] to-[#E85D04] text-white px-8 py-6 rounded-3xl shadow-2xl min-w-[220px] max-w-xs relative overflow-hidden group hover:scale-105 transition-transform duration-300 animate-pulse"
-              >
-                <div className="absolute -top-8 -right-8 opacity-20 group-hover:opacity-30 transition-all duration-300">
-                  <CheckCircle className="w-24 h-24" />
-                </div>
-                <div className="rounded-full bg-white/20 p-4 mb-2 shadow-lg animate-bounce">
-                  <Percent className="w-8 h-8 text-white" />
-                </div>
-                <div className="text-3xl font-extrabold tracking-wider">{discount.type === 'percentage' ? `%${discount.value}` : `€${discount.value}`}</div>
-                <div className="font-bold text-lg mt-1 mb-1">{discount.name}</div>
-                <div className="text-xs bg-white/20 rounded-full px-3 py-1 mt-2 font-semibold">
-                  {i18n.language === 'ar' ? 'ساري حتى' : i18n.language === 'de' ? 'Gültig bis' : 'Valid till'} {discount.validTill}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
       </div>
 
       {/* Categories Navigation */}
@@ -686,6 +832,12 @@ const DisplayScreen: React.FC = () => {
                 
                 {/* Badges */}
                 <div className={`absolute top-3 ${isRTL ? 'right-3' : 'left-3'} flex flex-col gap-2`}>
+                  {item.discount && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-extrabold shadow-lg border-2 border-white animate-pulse">
+                      <Percent className="w-3.5 h-3.5" />
+                      {item.discount.type === 'percentage' ? `%${item.discount.value}` : `€${item.discount.value}`}
+                    </span>
+                  )}
                   {item.isNew && (
                     <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 text-white text-xs font-extrabold shadow-lg border-2 border-white animate-bounce">
                       <Star className="w-3.5 h-3.5" />
@@ -711,14 +863,44 @@ const DisplayScreen: React.FC = () => {
                   <h3 className="text-xl font-bold text-gray-900 flex-1">
                     {getLocalizedName(item, 'name')}
                   </h3>
-                  <div className="text-2xl font-bold text-[#E85D04] ml-3">
-                    €{item.price.toFixed(2)}
+                  <div className="text-right ml-3">
+                    {item.discount ? (
+                      <div className="flex flex-col items-end">
+                        <div className="text-2xl font-bold text-green-600">
+                          €{item.discountedPrice?.toFixed(2)}
+                        </div>
+                        <div className="text-sm text-gray-500 line-through">
+                          €{item.price.toFixed(2)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-2xl font-bold text-[#E85D04]">
+                        €{item.price.toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <p className="text-gray-600 text-sm mb-4 leading-relaxed">
                   {getLocalizedName(item, 'description')}
                 </p>
+
+                {/* Discount Information */}
+                {item.discount && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Percent className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-semibold text-green-800">
+                        {item.discount.name}
+                      </span>
+                    </div>
+                    <div className="text-xs text-green-700">
+                      {i18n.language === 'ar' ? 'ساري حتى' : 
+                       i18n.language === 'de' ? 'Gültig bis' : 
+                       'Valid until'} {item.discount.validTill}
+                    </div>
+                  </div>
+                )}
 
                 {/* Ingredients */}
                 {item.allergens.length > 0 && (

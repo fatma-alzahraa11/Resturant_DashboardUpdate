@@ -4,6 +4,7 @@ import Product from '../models/Product';
 import Category from '../models/Category';
 import Order from '../models/Order';
 import Table, { ITable, ITableModel } from '../models/Table';
+import Discount from '../models/Discount';
 import qrService from '../services/qrService';
 import { rateLimit } from 'express-rate-limit';
 
@@ -25,6 +26,98 @@ export const orderRateLimit = rateLimit({
 });
 
 export default {
+  // Get public products for display screen
+  getProducts: async (req: any, res: any) => {
+    try {
+      const { restaurantId } = req.params;
+      const { categoryId, isAvailable = 'true' } = req.query;
+
+      // Validate restaurant
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant || !restaurant.isActive) {
+        return res.status(404).json({ error: 'Restaurant not found or inactive' });
+      }
+
+      // Build filter
+      const filter: any = {
+        restaurantId,
+        'availability.isAvailable': isAvailable === 'true'
+      };
+
+      if (categoryId) {
+        filter.categoryId = categoryId;
+      }
+
+      // Get products
+      const products = await Product.find(filter)
+        .populate('categoryId', 'name')
+        .sort({ sortOrder: 1, name: 1 });
+
+      res.json(products);
+    } catch (err: any) {
+      console.error('Error fetching public products:', err);
+      res.status(500).json({ error: 'Failed to fetch products' });
+    }
+  },
+
+  // Get public categories for display screen
+  getCategories: async (req: any, res: any) => {
+    try {
+      const { restaurantId } = req.params;
+
+      // Validate restaurant
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant || !restaurant.isActive) {
+        return res.status(404).json({ error: 'Restaurant not found or inactive' });
+      }
+
+      // Get categories
+      const categories = await Category.find({ 
+        restaurantId, 
+        isActive: true 
+      }).sort({ sortOrder: 1 });
+
+      res.json(categories);
+    } catch (err: any) {
+      console.error('Error fetching public categories:', err);
+      res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+  },
+
+  // Get public active discounts for display screen
+  getActiveDiscounts: async (req: any, res: any) => {
+    try {
+      const { restaurantId } = req.params;
+
+      // Validate restaurant
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant || !restaurant.isActive) {
+        return res.status(404).json({ error: 'Restaurant not found or inactive' });
+      }
+
+      // Get active and public discounts
+      const filter: any = { 
+        restaurantId, 
+        isActive: true,
+        isPublic: true
+      };
+
+      // Add date filter for currently valid discounts
+      const now = new Date();
+      filter['schedule.startDate'] = { $lte: now };
+      filter['schedule.endDate'] = { $gte: now };
+
+      const discounts = await Discount.find(filter)
+        .populate('restaurantId', 'name')
+        .sort({ priority: -1, createdAt: -1 });
+
+      res.json(discounts);
+    } catch (err: any) {
+      console.error('Error fetching public active discounts:', err);
+      res.status(500).json({ error: 'Failed to fetch discounts' });
+    }
+  },
+
   // Get restaurant menu by restaurant and store
   getMenu: async (req: any, res: any) => {
     try {

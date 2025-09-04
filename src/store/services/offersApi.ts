@@ -136,9 +136,9 @@ export const offersApi = createApi({
   endpoints: (builder) => ({
     // Get all offers with filtering and pagination
     getOffers: builder.query<OffersListResponse, OffersListParams | void>({
-      query: (params = {}) => ({
+      query: (params) => ({
         url: '/api/offers',
-        params,
+        params: params || {},
       }),
       providesTags: (result) =>
         result?.data
@@ -152,7 +152,7 @@ export const offersApi = createApi({
     // Get single offer by ID
     getOffer: builder.query<OfferResponse, string>({
       query: (id) => `/api/offers/${id}`,
-      providesTags: (result, error, id) => [{ type: 'Offer', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Offer', id }],
     }),
 
     // Get offer statistics
@@ -181,7 +181,7 @@ export const offersApi = createApi({
         method: 'PUT',
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [
+      invalidatesTags: (_result, _error, { id }) => [
         { type: 'Offer', id },
         { type: 'Offer', id: 'LIST' },
         { type: 'OfferStatistics', id: 'STATS' },

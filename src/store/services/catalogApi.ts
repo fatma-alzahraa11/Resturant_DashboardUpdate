@@ -77,6 +77,40 @@ export const catalogApi = createApi({
   }),
   tagTypes: ['Categories', 'Products'],
   endpoints: (builder) => ({
+    // Public endpoints for display screen (no authentication required)
+    getPublicProducts: builder.query<BackendProduct[] | any, { restaurantId: string }>({
+      query: ({ restaurantId }) => ({
+        url: `/api/public/products/${restaurantId}`,
+      }),
+      transformResponse: (response: any) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.products)) return response.products;
+        if (Array.isArray(response?.data)) return response.data;
+        return [];
+      },
+    }),
+    getPublicCategories: builder.query<BackendCategory[] | any, { restaurantId: string }>({
+      query: ({ restaurantId }) => ({
+        url: `/api/public/categories/${restaurantId}`,
+      }),
+      transformResponse: (response: any) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.categories)) return response.categories;
+        if (Array.isArray(response?.data)) return response.data;
+        return [];
+      },
+    }),
+    getPublicDiscounts: builder.query<any[], { restaurantId: string }>({
+      query: ({ restaurantId }) => ({
+        url: `/api/public/discounts/${restaurantId}`,
+      }),
+      transformResponse: (response: any) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.discounts)) return response.discounts;
+        if (Array.isArray(response?.data)) return response.data;
+        return [];
+      },
+    }),
     // Categories
     getCategories: builder.query<BackendCategory[] | any, { restaurantId?: string } | void>({
       query: (args) => ({
@@ -223,6 +257,9 @@ export const catalogApi = createApi({
 });
 
 export const {
+  useGetPublicProductsQuery,
+  useGetPublicCategoriesQuery,
+  useGetPublicDiscountsQuery,
   useGetCategoriesQuery,
   useGetCategoriesWithCountQuery,
   useCreateCategoryMutation,

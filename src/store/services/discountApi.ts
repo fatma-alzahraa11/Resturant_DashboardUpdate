@@ -140,7 +140,7 @@ export const discountApi = createApi({
       limit?: number;
     }>({
       query: (params) => ({
-        url: '',
+        url: '/',
         params: {
           ...params,
         },

@@ -397,8 +397,8 @@ restaurantSchema.virtual('averageRating').get(function() {
 
 // Virtual for subscription status
 restaurantSchema.virtual('subscriptionStatus').get(function() {
-  if (!this.subscription.isActive) return 'inactive';
-  if (this.subscription.endDate < new Date()) return 'expired';
+  if (!this.subscription || !this.subscription.isActive) return 'inactive';
+  if (this.subscription.endDate && this.subscription.endDate < new Date()) return 'expired';
   return 'active';
 });
 
@@ -414,9 +414,22 @@ restaurantSchema.index({ totalOrders: -1 });
 
 // Pre-save middleware to set subscription end date
 restaurantSchema.pre('save', function(next) {
-  if (this.isNew && !this.subscription.endDate) {
-    this.subscription.endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    this.subscription.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  if (this.isNew && (!this.subscription || !this.subscription.endDate)) {
+    if (!this.subscription) {
+      this.subscription = {
+        plan: 'basic',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        features: [],
+        monthlyPrice: 29.99,
+        isActive: true,
+        paymentMethod: 'none',
+        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      };
+    } else {
+      this.subscription.endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      this.subscription.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
   }
   next();
 });

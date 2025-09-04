@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Percent, Euro, Save, Check, Info, X } from 'lucide-react';
 import { RootState } from '../store';
 import { useGetProductsQuery, useGetProductByIdQuery } from '../store/services/catalogApi';
-import { useCreateDiscountMutation, useGetDiscountStatsQuery } from '../store/services/discountApi';
+import { useCreateDiscountMutation, useGetDiscountsQuery, useDeleteDiscountMutation } from '../store/services/discountApi';
 import {
   setDiscountName,
   setFromDate,
@@ -37,16 +37,6 @@ interface Product {
   isNew: boolean;
 }
 
-interface Discount {
-  id: string;
-  name: string;
-  fromDate: string;
-  toDate: string;
-  discountType: 'percentage' | 'fixed';
-  discountValue: number;
-  selectedProducts: string[];
-  isActive: boolean;
-}
 
 const Discounts: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -105,8 +95,9 @@ const Discounts: React.FC = () => {
   
   // API mutations and queries using real restaurant ID
   const [createDiscount, { isLoading: isCreating }] = useCreateDiscountMutation();
-  const { data: discountStats } = useGetDiscountStatsQuery(
-    restaurantId || '',
+  const [deleteDiscount, { isLoading: isDeleting }] = useDeleteDiscountMutation();
+  const { data: existingDiscounts, isLoading: discountsLoading, refetch: refetchDiscounts } = useGetDiscountsQuery(
+    { restaurantId: restaurantId || '' },
     { skip: !authToken || !restaurantId }
   );
   
@@ -116,6 +107,9 @@ const Discounts: React.FC = () => {
     selectedProductId || '', 
     { skip: !selectedProductId }
   );
+
+  // Delete confirmation state
+  const [discountToDelete, setDiscountToDelete] = useState<string | null>(null);
 
   // Date formatting helpers
 
@@ -131,6 +125,28 @@ const Discounts: React.FC = () => {
 
   const handleCloseProductDetail = () => {
     setSelectedProductId(null);
+  };
+
+  // Handle discount deletion
+  const handleDeleteDiscount = async (discountId: string) => {
+    try {
+      await deleteDiscount(discountId).unwrap();
+      refetchDiscounts(); // Refresh the discounts list
+      setDiscountToDelete(null); // Close confirmation dialog
+    } catch (error: any) {
+      console.error('Failed to delete discount:', error);
+      alert(error?.data?.error || 'Failed to delete discount. Please try again.');
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (discountToDelete) {
+      handleDeleteDiscount(discountToDelete);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDiscountToDelete(null);
   };
 
 
@@ -181,6 +197,7 @@ const Discounts: React.FC = () => {
 
       dispatch(setShowSuccess(true));
       dispatch(resetForm());
+      refetchDiscounts(); // Refresh the discounts list
       setTimeout(() => dispatch(setShowSuccess(false)), 3000);
     } catch (error: any) {
       console.error('Failed to create discount:', error);
@@ -226,6 +243,98 @@ const Discounts: React.FC = () => {
         </div>
 
         
+      </div>
+
+      {/* Existing Discounts */}
+      <div className="bg-white rounded-2xl shadow-xl p-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">
+          {t('discounts.existingDiscounts', { defaultValue: 'Existing Discounts' })}
+        </h2>
+        
+        {discountsLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="text-gray-600 mt-2">Loading discounts...</p>
+          </div>
+        ) : existingDiscounts?.discounts && existingDiscounts.discounts.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {existingDiscounts.discounts.map((discount: any) => (
+              <div key={discount._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {typeof discount.name === 'string' ? discount.name : discount.name?.en || 'Unnamed Discount'}
+                    </h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        discount.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {discount.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        discount.isPublic ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {discount.isPublic ? 'Public' : 'Private'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-600">
+                        {discount.rule?.type === 'percentage' ? `${discount.rule.value}%` : `€${discount.rule?.value}`}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {discount.rule?.type === 'percentage' ? 'Percentage' : 'Fixed Amount'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDiscountToDelete(discount._id)}
+                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
+                      title="Delete discount"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Start Date:</span>
+                    <span>{new Date(discount.schedule?.startDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>End Date:</span>
+                    <span>{new Date(discount.schedule?.endDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Target Products:</span>
+                    <span>{discount.target?.productIds?.length || 0} products</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Usage Count:</span>
+                    <span>{discount.usageCount || 0}</span>
+                  </div>
+                </div>
+                
+                {discount.description && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-sm text-gray-600">
+                      {typeof discount.description === 'string' ? discount.description : discount.description?.en || ''}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="p-3 bg-gray-100 rounded-xl mx-auto mb-4 w-fit">
+              <Percent className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No discounts created yet</h3>
+            <p className="text-gray-600">Create your first discount using the form below.</p>
+          </div>
+        )}
       </div>
 
       {/* Discount Configuration Form */}
@@ -643,6 +752,50 @@ const Discounts: React.FC = () => {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {discountToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="p-3 bg-red-100 rounded-xl mx-auto mb-4 w-fit">
+                <X className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {t('discounts.deleteConfirmation', { defaultValue: 'Delete Discount' })}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {t('discounts.deleteMessage', { 
+                  defaultValue: 'Are you sure you want to delete this discount? This action cannot be undone.' 
+                })}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={handleCancelDelete}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={isDeleting}
+                >
+                  {t('common.cancel', { defaultValue: 'Cancel' })}
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      {t('common.deleting', { defaultValue: 'Deleting...' })}
+                    </div>
+                  ) : (
+                    t('common.delete', { defaultValue: 'Delete' })
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

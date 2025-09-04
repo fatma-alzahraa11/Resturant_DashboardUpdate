@@ -6,6 +6,11 @@ const router = Router();
 // Public menu endpoints (no authentication required)
 router.get('/menu/:restaurantId/:storeId', publicRateLimit, PublicController.getMenu);
 
+// Public products and categories for display screen
+router.get('/products/:restaurantId', publicRateLimit, PublicController.getProducts);
+router.get('/categories/:restaurantId', publicRateLimit, PublicController.getCategories);
+router.get('/discounts/:restaurantId', publicRateLimit, PublicController.getActiveDiscounts);
+
 // QR code validation
 router.get('/qr/validate/:qrCode', publicRateLimit, PublicController.validateQR);
 
